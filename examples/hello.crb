@@ -1,0 +1,7 @@
+include :cstdio
+
+defn :main, nil => :int
+def main
+	printf 'Hello world!'
+	printf 'Woo!'
+end

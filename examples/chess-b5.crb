@@ -1,0 +1,81 @@
+include :cstdio, :cstring
+using_namespace :std
+
+
+defn :main, nil => :int
+def main
+	szachownica = Array(8, Array(8, ' '))
+	atakowane = Array(8, Array(8, false))
+	krolx = kroly = 0
+	derp = ' '
+	konieclewo = koniecprawo = koniecgora = koniecdol = false
+	
+	ile = 0
+	scanf "%d", ile
+	
+	ile.times do
+		64.times do |i|
+			scanf "%c", derp
+			if derp=="\n" or derp=="\r"
+				i-=1
+			else
+				szachownica[i/8][i%8] = derp
+			end
+		end
+		
+		memset atakowane, false, 64
+		
+		i = j = 0
+		0.upto(63) do |z|
+			i = z/8;  j = z%8
+			
+			if szachownica[i][j] == 'W'
+				(j+1).upto(7) do |h|
+					atakowane[i][h] = true
+					break if szachownica[i][h] == 'W'
+				end
+				(j-1).downto(0) do |h|
+					atakowane[i][h] = true
+					break if szachownica[i][h] == 'W'
+				end
+				
+				(i+1).upto(7) do |h|
+					atakowane[h][j] = true
+					break if szachownica[h][j] == 'W'
+				end
+				(i-1).downto(0) do |h|
+					atakowane[h][j] = true
+					break if szachownica[h][j] == 'W'
+				end
+			elsif szachownica[i][j] == 'K'
+				krolx = i
+				kroly = j
+			end
+		end
+		
+		konieclewo  = (krolx==0)
+		koniecprawo = (krolx==7)
+		koniecgora  = (kroly==0)
+		koniecdol   = (kroly==7)
+		
+		if(
+			(atakowane[krolx][kroly]) &&
+			
+			(konieclewo  || atakowane[krolx-1][kroly]) &&
+			(koniecprawo || atakowane[krolx+1][kroly]) &&
+			(koniecgora  || atakowane[krolx][kroly-1]) &&
+			(koniecdol   || atakowane[krolx][kroly+1]) &&
+			
+			(koniecgora || konieclewo  || atakowane[krolx-1][kroly-1]) &&
+			(koniecgora || koniecprawo || atakowane[krolx+1][kroly-1]) &&
+			(koniecdol  || konieclewo  || atakowane[krolx-1][kroly+1]) &&
+			(koniecdol  || koniecprawo || atakowane[krolx+1][kroly+1])
+		) then
+			printf "mat!\n"
+		else
+			printf "gramy dalej!\n"
+		end
+	end
+	
+	return 0
+end

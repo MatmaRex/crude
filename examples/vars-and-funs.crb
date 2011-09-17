@@ -1,0 +1,29 @@
+include :cstdio
+
+defn :multiply, [:int, :int] => :int
+def multiply a, b
+	return a * b
+end
+
+defn :main, nil => :int
+def main
+	buddy = 5
+	pal = buddy
+	buddy = 10
+	printf "Assignment: %d\n", pal
+	
+	bastard = buddy * 100
+	bastard2 = multiply(buddy, -100)
+	printf "Assignment with expression: %d\n", bastard
+	printf "Inline comparison with minus: %d\n", bastard == -bastard2
+	
+	sonnuva = multiply(buddy, 9) + multiply(buddy, -5)
+	printf "Functions calls: %d\n", sonnuva
+	
+	fact = true
+	bull = !fact
+	printf "Boolean: %d\n", bull
+	
+	crazy_math = 1*2+4%6*8
+	printf "Operators test: %d\n", crazy_math
+end

@@ -1,0 +1,22 @@
+include :cstdio
+
+defn :rec, :int => nil
+def rec a
+	if a != 0
+		rec a/2
+		printf "%d", a%2
+	end
+end
+
+defn :main, nil => :int
+def main
+	ile = 0
+	scanf "%d", ile
+	
+	l = 0
+	ile.times do
+		scanf "%d", l
+		l==0 ? printf("0") : rec(l)
+		printf "\n"
+	end
+end

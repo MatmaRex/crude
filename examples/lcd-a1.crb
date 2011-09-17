@@ -1,0 +1,22 @@
+include :cstdio
+
+defn :lcd, [:int, :int] => :int
+def lcd a, b
+	if b==0
+		return a
+	else
+		return lcd b, a%b
+	end
+end
+
+defn :main, nil => :int
+def main
+	ile = 0
+	scanf "%d", ile
+	
+	a = b = 0
+	ile.times do
+		scanf "%d %d", a, b
+		printf "%d\n", lcd(a, b)
+	end
+end

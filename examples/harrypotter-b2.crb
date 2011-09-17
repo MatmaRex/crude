@@ -1,0 +1,39 @@
+include :cstdio, :cstring
+using_namespace :std
+
+
+
+defn :main, nil => :int
+def main
+	ile = 0
+	scanf "%d", ile
+	
+	teraz = j = dump = 0
+	stos = Array(200001, 0)
+	
+	ile.times do
+		scanf "%d", teraz
+		teraz.times do 
+			scanf "%d", dump
+			
+			if j>0 and dump == stos[j-1]
+				j-=1
+				stos[j] = 0
+			else
+				stos[j] = dump
+				j+=1
+			end
+		end
+		
+		if stos[0] == 0
+			printf("TAK\n")
+		else
+			printf("NIE\n")
+		end
+		
+		memset stos, 0, j+1
+		j = 0
+	end
+	
+	return 0
+end
