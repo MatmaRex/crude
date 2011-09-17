@@ -1,27 +1,13 @@
 require 'ruby_parser'
 require 'pp'
 
-
-$stuffs = Hash.new{|h,k| h[k] = {} }
-
-def curlify text
-	text += ";" unless text=~/\s*[\};]\Z/ or text=~/\A#/ or text=~/\A\s*\Z/
-	"{\n#{text.gsub(/^/, '  ')}\n}\n"
-end
-
-def get_tmp_var_name
-	if $stuffs[:last_tmp] == {}
-		$stuffs[:last_tmp] = 100
+class CrudeCompiler
+	def initialize
+		@stuffs = Hash.new{|h,k| h[k] = {} } # TODO: split into many hashes
 	end
 	
-	$stuffs[:last_tmp] += 1
-	
-	'_' + $stuffs[:last_tmp].to_s
-end
-
-class Array
-	def to_c
-		type, *rest = *self
+	def compile sexp
+		type, *rest = *sexp
 		this = rest[0] if rest.length==1
 		
 		case type
@@ -38,15 +24,15 @@ class Array
 					arguments.map{|a| "using namespace #{a[1]}"}.join(";\n")
 				when :defn
 					_, fun_name, hsh = *arglist
-					$stuffs[:function_sigs][fun_name[1] ] = {:from=>hsh[1], :to=>hsh[2]}
+					@stuffs[:function_sigs][fun_name[1] ] = {:from=>hsh[1], :to=>hsh[2]}
 					''
 				# convenience, methods requiring references - TODO: FIXME
 				when :scanf
 					# HORRIBLE HACK used to prevent prepending & to first arg
-					"#{name}(#{arguments.map{|a| a.to_c.to_s}.join ', &'})"
+					"#{name}(#{arguments.map{|a| compile a}.join ', &'})"
 					
 				else
-					"#{name}(#{arglist.to_c})"
+					"#{name}(#{compile arglist})"
 				end
 				
 			else
@@ -54,23 +40,23 @@ class Array
 					name = name.to_s
 					
 					if name.length == 1 or (name.length==2 and name[-1] == '=')
-						"(#{receiver.to_c} #{name} #{arguments.map(&:to_c).join(', ')})"
+						"(#{compile receiver} #{name} #{arguments.map{|a| compile a}.join(', ')})"
 					elsif name=='-@' || name=='+@'
-						"(#{name[0...-1]}#{receiver.to_c})"
+						"(#{name[0...-1]}#{compile receiver})"
 					elsif name=='[]'
-						"#{receiver.to_c}[#{arguments.map(&:to_c).join(', ')}]"
+						"#{compile receiver}[#{arguments.map{|a| compile a}.join(', ')}]"
 					elsif name=='[]='
-						"#{receiver.to_c}[#{arguments.shift.to_c}] = #{arguments.map(&:to_c).join(', ')}"
+						"#{compile receiver}[#{compile arguments.shift}] = #{arguments.map{|a| compile a}.join(', ')}"
 					else
 						raise "call: unsupported operator #{name}"
 					end
 				else # assume people know what they're doing
-					"#{receiver.to_c}.#{name}(#{arguments.map(&:to_c).join(', ')})"
+					"#{compile receiver}.#{name}(#{arguments.map{|a| compile a}.join(', ')})"
 				end
 			end
 			
 		when :arglist
-			out = rest.map(&:to_c).join ', '
+			out = rest.map{|a| compile a}.join ', '
 			# p rest, out
 			out
 		
@@ -78,14 +64,14 @@ class Array
 			fun_name, args, body = *rest
 			args = args[1..-1]
 			
-			to = $stuffs[:function_sigs][fun_name][:to]
+			to = @stuffs[:function_sigs][fun_name][:to]
 			if to == [:nil]
 				ret_type = 'void'
 			else
 				ret_type = to[1].to_s
 			end
 			
-			from = $stuffs[:function_sigs][fun_name][:from]
+			from = @stuffs[:function_sigs][fun_name][:from]
 			if from == [:nil]
 				args_types = []
 			elsif from[0] == :array
@@ -96,7 +82,7 @@ class Array
 			
 			
 			sig = "#{ret_type} #{fun_name}(#{args_types.zip(args).map{|pair| pair.join ' '}.join(', ')})"
-			fun_body = body.to_c
+			fun_body = compile body
 			
 			
 			"#{sig}\n#{curlify fun_body}"
@@ -113,8 +99,8 @@ class Array
 			when :lasgn # multiassignment
 				# we do it the other way around, so we can get the type 
 				# of the other variable, if it's being declared right now too
-				prepend = value.to_c + ";\n"
-				type = $stuffs[:var_types][value[1] ]
+				prepend = compile(value) + ";\n"
+				type = @stuffs[:var_types][value[1] ]
 				value = value[1]
 			when :lit
 				type = value[1].to_c_type
@@ -128,7 +114,7 @@ class Array
 					value = "'" + value[1].inspect[1..-2].gsub(/'/, "\\'") + "'" # TODO: i'm pretty sure this is broken
 				end
 			when :lvar
-				type = $stuffs[:var_types][value[1] ]
+				type = @stuffs[:var_types][value[1] ]
 				value = value[1]
 			when :call
 				if value[2] and value[2] == :Array
@@ -150,7 +136,7 @@ class Array
 						when :str;           'char'
 						when :true, :false;  'bool'
 						end
-						value = "{#{arguments[1].to_c}}/**/" # a brace might prevent semicolon insertion
+						value = "{#{compile arguments[1]}}/**/" # a brace might prevent semicolon insertion
 						
 					else
 						default = arguments[1]
@@ -160,16 +146,16 @@ class Array
 						when :true, :false;  'bool'
 						end
 						after_modifiers = "[#{size}]"
-						value = "{#{arguments[1].to_c}}/**/" # a brace might prevent semicolon insertion
+						value = "{#{compile arguments[1]}}/**/" # a brace might prevent semicolon insertion
 					end
 					
 				else
 					type = '/*assumed*/ int'
-					value = value.to_c
+					value = compile value
 				end
 			when :not
 				type = 'bool'
-				value = value.to_c
+				value = compile value
 			when :true, :false
 				type = 'bool'
 				value = value[0].to_s
@@ -177,18 +163,18 @@ class Array
 				raise "lasgn: unsupported value type `#{value[0]}` / #{value.inspect}"
 			end
 			
-			if $stuffs[:var_types][name]
+			if @stuffs[:var_types][name]
 				prepend + "#{name} = #{value}"
 			else
-				$stuffs[:var_types][name] = type
+				@stuffs[:var_types][name] = type
 				prepend + "#{type} #{before_modifiers}#{name}#{after_modifiers} = #{value}"
 			end
 			
 		when :if
 			condition, iftrue, iffalse = *rest
 			
-			ret = "if(#{condition.to_c})\n#{iftrue ? (curlify iftrue.to_c) : "{}\n"}"
-			ret += "else\n#{curlify iffalse.to_c}" if iffalse
+			ret = "if(#{compile condition})\n#{iftrue ? (curlify compile iftrue) : "{}\n"}"
+			ret += "else\n#{curlify compile iffalse}" if iffalse
 			ret
 		
 		when :iter
@@ -206,24 +192,24 @@ class Array
 			# TODO: fixme
 			when :times
 				iter_var_name ||= get_tmp_var_name()
-				$stuffs[:var_types][iter_var_name.to_sym] = 'int'
-				ret = "for(int #{iter_var_name}=0; #{iter_var_name}<#{receiver.to_c}; #{iter_var_name}++)\n"
-				ret += body ? (curlify body.to_c) : '{}'
-				$stuffs[:var_types][iter_var_name.to_sym] = nil # the variable is out of scope now
+				@stuffs[:var_types][iter_var_name.to_sym] = 'int'
+				ret = "for(int #{iter_var_name}=0; #{iter_var_name}<#{compile receiver}; #{iter_var_name}++)\n"
+				ret += body ? (curlify compile body) : '{}'
+				@stuffs[:var_types][iter_var_name.to_sym] = nil # the variable is out of scope now
 				ret
 			when :upto
 				iter_var_name ||= get_tmp_var_name()
-				$stuffs[:var_types][iter_var_name.to_sym] = 'int'
-				ret = "for(int #{iter_var_name}=#{receiver.to_c}; #{iter_var_name}<=#{arglist[1].to_c}; #{iter_var_name}++)\n"
-				ret += body ? (curlify body.to_c) : '{}'
-				$stuffs[:var_types][iter_var_name.to_sym] = nil # the variable is out of scope now
+				@stuffs[:var_types][iter_var_name.to_sym] = 'int'
+				ret = "for(int #{iter_var_name}=#{compile receiver}; #{iter_var_name}<=#{compile arglist[1]}; #{iter_var_name}++)\n"
+				ret += body ? (curlify compile body) : '{}'
+				@stuffs[:var_types][iter_var_name.to_sym] = nil # the variable is out of scope now
 				ret
 			when :downto
 				iter_var_name ||= get_tmp_var_name()
-				$stuffs[:var_types][iter_var_name.to_sym] = 'int'
-				ret = "for(int #{iter_var_name}=#{receiver.to_c}; #{iter_var_name}>=#{arglist[1].to_c}; #{iter_var_name}--)\n"
-				ret += body ? (curlify body.to_c) : '{}'
-				$stuffs[:var_types][iter_var_name.to_sym] = nil # the variable is out of scope now
+				@stuffs[:var_types][iter_var_name.to_sym] = 'int'
+				ret = "for(int #{iter_var_name}=#{compile receiver}; #{iter_var_name}>=#{compile arglist[1]}; #{iter_var_name}--)\n"
+				ret += body ? (curlify compile body) : '{}'
+				@stuffs[:var_types][iter_var_name.to_sym] = nil # the variable is out of scope now
 				ret
 			else
 				raise "iter: unsupported block given for method `#{meth}`"
@@ -234,7 +220,7 @@ class Array
 			when Numeric
 				this.to_s
 			when Symbol
-				$stuffs[:symbols][this] ||= $stuffs[:symbols].length + 1
+				@stuffs[:symbols][this] ||= @stuffs[:symbols].length + 1
 				this.to_s
 			end
 		
@@ -246,15 +232,15 @@ class Array
 			end
 			
 		when :not
-			"!(#{this.to_c})"
+			"!(#{compile this})"
 			
 		when :and
-			"((#{rest[0].to_c}) && (#{rest[1].to_c}))"
+			"((#{compile rest[0]}) && (#{compile rest[1]}))"
 		when :or
-			"((#{rest[0].to_c}) || (#{rest[1].to_c}))"
+			"((#{compile rest[0]}) || (#{compile rest[1]}))"
 			
 		when :return
-			"return #{rest[0].to_c};"
+			"return #{compile rest[0]};"
 		when :break
 			"break;"
 		when :next
@@ -265,7 +251,7 @@ class Array
 			
 		when :block, :scope
 			rest.map{|a|
-				r = a.to_c.to_s.strip
+				r = compile(a).to_s.strip
 				r += ";" unless r=~/\s*[\};]\Z/ or r=~/\A#/ or r=~/\A\s*\Z/
 				r
 			}.join("\n")
@@ -280,18 +266,31 @@ class Array
 		end
 	end
 	
+	# private
+	def curlify text
+		text += ";" unless text=~/\s*[\};]\Z/ or text=~/\A#/ or text=~/\A\s*\Z/
+		"{\n#{text.gsub(/^/, '  ')}\n}\n"
+	end
 	
+	# private
+	def get_tmp_var_name
+		if @stuffs[:last_tmp] == {}
+			@stuffs[:last_tmp] = 100
+		end
+		
+		@stuffs[:last_tmp] += 1
+		
+		'_' + @stuffs[:last_tmp].to_s
+	end
 end
 
-
+# TODO: get rid of these
 class Fixnum; def to_c_type; 'int';   end; end
 class Float;  def to_c_type; 'float'; end; end
 class Symbol; def to_c_type; 'int';   end; end
 class String; def to_c_type; 'char';  end; end
 
-
-parsed = RubyParser.new.parse File.read ARGV[0]
-puts parsed.to_a.to_c
-
-# TODO: symbols as constants
-# pp $stuffs
+if __FILE__ == $0
+	parsed = CrudeCompiler.new.compile RubyParser.new.parse File.read ARGV[0]
+	puts parsed
+end
