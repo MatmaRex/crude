@@ -1,0 +1,8 @@
+Notable lacking features that would be great to have. Notably awful hacks and bugs.
+
+* to_c is a single, 260 lines long method. Begging for a rewrite. (Split each 'when' clause in separate method?)
+* multi-assignment (a,b = b,a)
+* support for most stdlib iterators
+* classes
+
+This list is by no means exhaustive.
